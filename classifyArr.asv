@@ -1,0 +1,226 @@
+% Classificação de Arritmias
+%
+% type : 'AAMI' ou 'AAMI2'
+%
+% featureSet: conjunto de características
+% Pode assimir os valores:
+%
+% '2005Chazal', '2005Guler', 2005Song, 2006Yu, 2007Yu, 2010YeCoimbra, VCGComplexNet
+%
+% classifier: classificador a ser utilizado
+% Pode assumir os valores:
+%
+% 'SVM', 'MLP', 'PNN', 'LD'
+%
+% Autor: Eduardo Luz
+%
+% testar best c=128 g=0.0625 rate=55.3843%)
+%
+
+function classifyArr(featureSet, classifier, type)
+
+if nargin < 3
+   type = 'AAMI';
+end
+
+n_tot=0;
+s_tot=0;
+v_tot=0;
+f_tot=0;
+q_tot=0;
+n_line = 0;
+s_line = 0;
+v_line = 0;
+f_line = 0;
+q_line = 0;
+n_col = 0;
+s_col = 0;
+v_col = 0;
+f_col = 0;
+q_col = 0;
+
+%registers = {'100';'103';'105';'111';'113';'117';'121';'123';'200';'202';'210';'212';'213';'214';'219';'221';'222';'228';'231';'232';'233';'234';'101';'106';'108';'109';'112';'114';'115';'116';'118';'119';'122';'124';'201';'203';'205';'207';'208';'209';'215';'220';'223';'230'};
+
+registers = {'105';'100';'103';'111';'113';'117';'121';'123';'200';'202';'210';'212';'213';'214';'219';'221';'222';'228';'231';'232';'233';'234';'101';'106';'108';'109';'112';'114';'115';'116';'118';'119';'122';'124';'201';'203';'205';'207';'208';'209';'215';'220';'223';'230'};
+
+%fprintf('\n Registro | Acc | Nn Ns Nv Sn Ss Sv Vn Vs Vv | N_Se SVEB_Se VEB_Se N+P SVEB+P VEB+P \n')
+fprintf('\n Registro | Acc | N_Se SVEB_Se VEB_Se N+P SVEB+P VEB+P \n')
+
+for t=1:44 % numero de registros
+
+    test_da = [];
+    train_ds = [];
+    test_ds = str2double(registers(t));
+    count=1;
+    
+    for j=1:44
+        if j ~= t
+            train_ds(count) = str2double(registers(j));
+            count = count +1;
+        end
+    end
+    
+%% Carrega os dados
+if(strcmp(featureSet,'2004Chazal'))
+    %cd \features\2004Chazal\
+    feat_folder = ['features\' featureSet];
+    %cd('\features\2004Chazal\')
+    cd(feat_folder)
+    
+    % já esta sendo feita normalizacao dentro da função : 
+    % Xnorm = X - media_treino / std_treino
+
+    if(strcmp(type,'AAMI2'))
+        [fs1 fs2 fs3 fs4 fs5 fs6 fs7 fs8 target] = loadDataAAMI2(train_ds,test_ds);
+    else
+        [fs1 fs2 fs3 fs4 fs5 fs6 fs7 fs8 target] = loadDataAAMI(train_ds,test_ds);
+    end
+
+    %primeira etapa com DS1 treino DS2 teste
+    fs1.train = [fs3.train fs7.train];
+    fs1.test = [fs3.test fs7.test];
+
+    cd ..
+    cd ..
+else
+    feat_folder = ['features\' featureSet];
+    %s = char(recordedSignal);
+    cd(feat_folder)
+    
+    % já esta sendo feita normalizacao dentro da função : 
+    % Xnorm = X - media_treino / std_treino
+
+    if(strcmp(type,'AAMI2'))
+        [p1d p1t p2d p2t] = loadDataAAMI2(0,feat_folder,train_ds,test_ds);
+    else
+        [p1d p1t p2d p2t] = loadDataAAMI(0,feat_folder,train_ds,test_ds);
+    end
+
+    %primeira etapa com DS1 treino DS2 teste
+    fs1.train = p1d;
+    fs1.test = p2d;
+    target.train = p1t;
+    target.test = p2t;
+    
+    cd ..
+    cd .. 
+end
+
+%% aplica o classificador
+if(strcmp(classifier,'LD'))
+    cd('LD_classifier')
+
+    [acc1 sensitivityN1 sensitivitySVEB1 sensitivityVEB1 sensitivityF1 sensitivityQ1 specificityN1 specificitySVEB1 specificityVEB1 specificityF1 specificityQ1 cm1] = ld_Classifier(fs1,target);
+    
+    %fprintf('\n----------------------- Classificador LD ---------------------\n')
+    cd ..
+elseif(strcmp(classifier,'SVM'))
+    cd('svm')
+    
+    %[best_c,best_g,best_cv,hC] = parameter_optimization(fs1.train, target.train);
+    %best_c=128;
+    %best_c=64;
+    %best_g=0.0625;
+    
+    %[newData newTarget] = unedersampling_class1(5, fs1.train,target.train);
+    %[best_c,best_g,best_cv,hC] = parameter_optimization(newData,newTarget);
+    tic
+    
+    [acc1 sensitivityN1 sensitivitySVEB1 sensitivityVEB1 sensitivityF1 sensitivityQ1 specificityN1 specificitySVEB1 specificityVEB1 specificityF1 specificityQ1 cm1] = svm_Classifier(fs1.train,target.train,fs1.test,target.test);
+    
+    toc
+    %fprintf('\n----------------------- Classificador SVM ---------------------\n')
+    
+    cd ..
+%elseif(strcmp(classifier,'PNN'))
+%    cd pnn
+%    
+%    [acc1 sensitivityN1 sensitivitySVEB1 sensitivityVEB1 sensitivityF1 sensitivityQ1 specificitySVEB1 specificityVEB1 specificityF1 specificityQ1] = pnn_Classifier(fs.train,target.train,fs.test,target.test);
+%    [acc2 sensitivityN2 sensitivitySVEB2 sensitivityVEB2 sensitivityF2
+%    sensitivityQ2 specificitySVEB2 specificityVEB2 specificityF2 specificityQ2] = svm_Classifier(fs.train,target.train,fs.test,target.test);%
+
+%    cd ..
+elseif(strcmp(classifier,'MLP'))
+    cd('mlp')
+    
+    [acc1 sensitivityN1 sensitivitySVEB1 sensitivityVEB1 sensitivityF1 sensitivityQ1 specificityN1 specificitySVEB1 specificityVEB1 specificityF1 specificityQ1 cm1] = mlp_Classifier(fs1.train,target.train,fs1.test,target.test);
+    
+    %fprintf('\n----------------------- Classificador MLP comb ---------------------\n')
+    
+    cd ..
+end
+
+%cm1
+
+%cm2
+
+%if(strcmp(type,'AAMI2'))
+    %fprintf('\n\n-- Teste AAMI2 3 classes \n')
+%else
+    %fprintf('\n\n-- Teste AAMI 5 classes \n')
+%end
+
+    %fprintf('\n Registro | Acc | Nn Ns Nv Sn Ss Sv Vn Vs Vv | N_Se SVEB_Se VEB_Se N+P SVEB+P VEB+P \n')
+    cm1
+    
+    fprintf('\n');
+    
+    fprintf('Registro=%6.0f | Acc=%6.2f |', str2double(registers(t)), acc1(1));
+    
+    %col = size(cm1,2);
+    %if(col >3) %mostra no máximo até VEB
+    %    col=3;
+    %end
+    
+    %for i=1:size(cm1,1)
+    %    for j=1:
+    %        fprintf(' %6.0f',cm1(i,j))
+    %    end
+    %end
+    
+    fprintf(' N_Se=%6.2f SVEB_Se=%6.2f VEB_Se=%6.2f N+P=%6.2f SVEB+P=%6.2f VEB+P=%6.2f \n\n',...
+       sensitivityN1, sensitivitySVEB1,sensitivityVEB1,  specificityN1, specificitySVEB1,specificityVEB1)
+   
+   t=0;
+   if(sensitivityN1>=0)
+       t = t+1;
+       n_tot = n_tot + sum(cm1(t,t));
+       n_line = n_line + sum(cm1(t,:));
+       n_col = n_col + sum(cm1(:,t));
+   end
+   
+   if(sensitivitySVEB1>=0)
+       t = t+1;
+       s_tot = s_tot + sum(cm1(t,t));
+       s_line = s_line + sum(cm1(t,:));
+       s_col = s_col + sum(cm1(:,t));
+   end
+   
+   if(sensitivityVEB1>=0)
+       t = t+1;
+       v_tot = v_tot + sum(cm1(t,t));
+       v_line = v_line + sum(cm1(t,:));
+       v_col = v_col + sum(cm1(:,t));
+   end
+   
+   if(sensitivityF1>=0)
+       t = t+1;
+       f_tot = f_tot + sum(cm1(t,t));
+       f_line = f_line + sum(cm1(t,:));
+       f_col = f_col + sum(cm1(:,t));
+   end
+   
+   if(sensitivityQ1>=0)
+       t = t+1;
+       q_tot = q_tot + sum(cm1(t,t));
+       q_line = q_line + sum(cm1(t,:));
+       q_col = q_col + sum(cm1(:,t));
+   end
+   
+end % for t
+
+fprintf('\n Gross Statistics:\n')
+fprintf(' Acc = %6.2f | N_Se=%6.2f SVEB_Se=%6.2f VEB_Se=%6.2f F_Se=%6.2f Q_Se=%6.2f N+P=%6.2f SVEB+P=%6.2f VEB+P=%6.2f F+P=%6.2f Q+P=%6.2f \n\n',...
+       (n_tot+s_tot+v_tot+f_tot+q_tot)/(n_line+s_line+v_line+f_line+q_line) , n_tot/n_line, s_tot/s_line, v_tot/v_line, f_tot/f_line, q_tot/q_line, n_tot/n_col, s_tot/s_col, v_tot/v_col, f_tot/f_col, q_tot/q_col)
+
+end

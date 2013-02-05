@@ -1,0 +1,245 @@
+=========================================================================================================
+Descrição: Coletânia de scripts para Matlab para classificação de arritmias em ECG
+Autor: Eduardo Luz
+=========================================================================================================
+
+INSTRUÇÔES PARA UTILIZAÇÂO DO CÓDIGO:
+
+Antes de utilizar nosso código, vou explicar um pouco do problema, começando pelo banco de dados de arritmia do MIT-BIH, que é o mais utilizado na literatura. Esta base de dados tem 48 registros de aproximadamente 30 minutos de aquisição de curvas de ECG, amostrados a 360Hz. Cada registro tem somente batimentos de um único paciente (cada registro tem aproximadamente de 1500 a 2000 batimentos). 
+
+Dos 48 registros, 23 (com números/IDs variando entre 100 a 124, com duas ausências) foram escolhidos aleatoriamente neste conjunto.
+Outros vinte e cinco registros (com números/IDs variando entre 200 a 234) desse conjunto foram selecionados de forma a se obter uma representação dos 15 tipos de batimentos (classes/padrões de batimentos) mais importantes. 
+
+Ainda, exite uma norma ( ANSI/AAMI/ISO EC57, 1998-(R)2008) que regula algoritmos destinados a este fim, ou seja, classificaçao/detecçao de arritmais. Esta norma recomenda a utilzação do BD do MIT-BIH e especifica quais medidas devem ser utilizadas pelos algoritmos para reportar os resultados.
+As medidas recomendadas pela AAMI para avaliação dos métodos são Sensitivity (Se), Positive Predictivity (+P), False Positive Rate (FPR) e Acurácia Global (Acc).
+(Sensitivity e Positive Predictivity também são conhecidas na literatura por Recall e Precision, respectivamente.) 
+Apesar da existência de vários tipos de arritmias cardíacas, a AAMI recomenda que somente alguns tipos devem ser detectados pelos equipamentos/métodos.
+São 15 as classes de batimentos recomendadas (e presentes no BD do MIT-BIH) e essas classes devem ser agrupadas em cinco superclasses: Normal (N), Supraventricular ectopic beat (SVEB), Ventricular ectopic beat (VEB), Fusion beat (F) e Unknow beat (Q). A norma também exige que quatro registros sejam excluídos das análises pois são de pacientes com marca-passo.
+
+-------------
+Para mais detalhes ver:
+
+ANSI/AAMI (2008). Testing and reporting performance results of cardiac rhythm and ST
+segment measurement algorithms. American National Standards Institute, Inc. (ANSI),
+Association for the Advancement of Medical Instrumentation (AAMI). ANSI/AAMI/ISO
+EC57, 1998-(R)2008.
+-----------
+
+Uma coisa que era usualmente feita na literatura e que 'enviezava' os resultados era construir  modelos sem a preocupação de quais batimentos foram selecionados para a criação do mesmo. Vou dar um exemplo. Vamos supor que você utilize 6 registros para treinar um classificador para discriminar duas classes: classe A e classe B. Ainda, vamos supor que os batimentos destes registros reunidos totalizem 10000 batimentos cardíacos, sendo que 9000 são da classe A e 1000 da classe B.
+
+Usualmente na literatura, pesquisadores colocavam todos estes batimentos em um mesmo "bolo" e criavam dois grupos sorteando os batimentos aleatoriamente. Dessa forma, era criado um grupo de treino e um grupo de teste e embora os grupos tivessem batimentos cardíacos únicos eles podiam ser de um mesmo paciente . Assim, construía-se o modelo com o grupo de treino e a avaliação era feita com o grupo de teste. Estes pesquisadores reportavam aproximadamente 99% de acurácia total, com altos valores (beirando 99%) de precision e recall para ambas as classes (majoritária e minoritária).
+
+Até que em 2004, Dr. de Chazal, mostrou que os classificadores estavam sendo favorecidos com essa seleção aleatória de batimentos cardíacos e que os classificadores aprendiam nuancias dos batimentos dos pacientes que ele já tinha visto o que tornava a tarefa de classificação no teste extremamente fácil. O que ele sugeriu foi criar dois grupos de forma que o classificador fosse treinado com batimentos de alguns pacientes e que os batimentos destes pacientes não participassem da avaliação do método, ou seja, durante o teste o classificador não iria se deparar com batimentos de pacientes que ele já conhecia, o que é mais justo, pois em um ambiente real é isso que acontece. O resultado disso foi uma queda drástica nos valores da acurácia global, que passava de 99% para algo em torno 80%. A ainda, os valores de precision e recall para as classes minoritártias (classe B) cairiam ainda mais (em torno de 40%).
+
+----
+Recomendo a leitura de: 
+
+Luz, E. e Menotti, D. (2011a). How the choice of samples for building arrhythmia classifiers
+impact their performances. In Annual International Conference of the IEEE Engineering
+in Medicine and Biology Society (EMBC), pp. 4988–4991.
+
+de Chazal, P.; O’Dwyer, M. e Reilly, R. B. (2004). Automatic classification of heartbeats
+using ECG morphology and heartbeat interval features. IEEE Transactions on Biomedical
+Engineering, 51(7):1196–1206.
+----
+
+Assim, utilizamos os conjuntos de registros sugeridos por Dr. de Chazal, que não é perfeito mas é o mais razoável a se fazer hoje em dia. Seguimos a nomenclatura imposta por ele, e você verá dois conjuntos em nossos códigos: DS1 (conjunto de treino composto por 22 pacientes) e DS2 (conjunto de teste composto por 22 pacientes).
+Este conjuntos devem ser utilizados para treino e avaliaçao dos modelos/métodos para que uma comparação masi justa possa ser feita com métodos já
+publicados. Os conjuntos são formados pelos registros do BD do MIT-BIH:
+
+DS1 = {'101';'106';'108';'109';'112';'114';'115';'116';'118';'119';'122';'124';'201';'203';'205';'207';'208';'209';'215';'220';'223';'230'};
+DS2 = {'100';'103';'105';'111';'113';'117';'121';'123';'200';'202';'210';'212';'213';'214';'219';'221';'222';'228';'231';'232';'233';'234'};
+
+----------------------------------------------------------------------------------------------------------
+O nosso código compreende:
+
+1) Métodos implementados
+2) Extração de características
+3) Classificação
+	3.1) classify_lopo_ds1
+	3.2) classify_test_ds2	
+	3.3) Parâmetros para classify_lopo_ds1 e classify_test_ds2
+4) Classificador OPF (biblioteca externa)
+5) Framework WEKA (ARFF)
+
+
+
+
+1) Métodos implementados
+
+ Alguns métodos já publicados na literatura foram reimplementados: 
+	
+	o Chazal et al, 2004 (TBE)
+	o Yu and Chou, 2006 (ESA)
+	o Yu e Chen, 2007 (PRL)
+	o Song et al, 2005 (IJCAS)
+	o Ye et al, 2012 (EMBC)
+	o Guler and Ubeyli, 2005 (PR)
+
+A reimplementação compreende pré-processamento, segmentaçao, extração de características e classificação. 
+Inicialmente, criou-se um diretório para cada método na pasta "features" do projeto:
+
+	o Chazal et al, 2004 (TBE) 	-> features/2004Chazal
+	o Yu and Chou, 2006 (ESA)  	-> features/2006Yu	
+	o Yu e Chen, 2007 (PRL)    	-> features/2007Yu
+	o Song et al, 2005 (IJCAS) 	-> features/2005Song
+	o Ye et al, 2010 (EMBC)    	-> features/2010Ye
+	o Guler and Ubeyli, 2005 (PR)   -> features/2005Guler
+
+2) Extração de características
+
+As etapas de pré-processamento, segmentaçao e extração de características foram implementadas no arquivo
+"featureExtraction.m", presente dentro do diretório do método e uma vez executado, arquivos de texto contendo
+as características extraídas de cada registro do BD do MIT-BIH são gerados. Uma vez feito isso, pode-se dar início ao processo de 
+classificação.
+
+3) Classificação
+
+Os métodos atualmente reimplementados utilizam classificadores diferentes:
+
+	o Chazal et al, 2004 (TBE) 	-> Linear Discriminants (LD)
+	o Yu and Chou, 2006 (ESA)  	-> Probabilistic Neural Networks (PNN)
+	o Yu e Chen, 2007 (PRL)    	-> Probabilistic Neural Networks (PNN)
+	o Song et al, 2005 (IJCAS) 	-> SVM
+	o Ye et al, 2010 (EMBC)    	-> SVM
+	o Guler and Ubeyli, 2005 (PR)   -> Combined MLP (MLP)
+
+Com excessão do Linear Discriminants, que foi implementado aqui, os outros classificadores foram escritos por terceiros.
+Para o SVM utilizamos a LibSVM e para o resto toolbox do próprio Matlab.
+*** Atenção: para utilizar o classificador OPF, Leia a seção 4 *** 
+Foram criados scripts para automatizar a tarefa de classificaçao e o uso destes é detalhado a seguir.
+Os scripts mais importantes são classify_lopo_ds1(..) e classify_test_ds2(..).
+
+	3.1) classify_lopo_ds1
+	O "lopo" é uma abreviação de leave one patient out, fazendo uma alusão aos esquemas de validação cruzada leave-k-out, onde k aqui
+	é um registro de pacientes. Para cada iteraçao deste teste, um modelo é criado com batimentos de 21 registros de DS1 e apenas
+	1 registro fica de fora para o teste. Como DS1 contém 22 registros (de pacientes), o teste é executado 22 vêzes e a estatística
+	é gerada no final, em formato de uma tabela Latex e colocado na pasta "results/Metodo/ds1_lopo.tex". Esta estatística, feita somente
+	em DS1, ou seja, na partição de teste, somente é utilizada para ajustes do modelo ou para escolha do melhor modelo.
+
+	3.2) classify_test_ds2
+	Esta função executa o teste para avaliação final do método. Um modelo é criado com todos os batimentos dos registros de DS1 e este
+	modelo é aplicado aos batimentos dos registros de DS2. Estatísticas finais são geradas em formato de uma tabela Latex, e colocadas na pasta 		"results/Metodo/ds2_test.tex".
+
+	3.3) Parâmetros para classify_lopo_ds1 e classify_test_ds2
+	São 6 os parâmetros das funções acima: classify_xxx(featureSet, featSel, classifier, param1, param2, param3)
+
+		- featureSet: string com o nome do diretório contendo as características extraídas para o método.
+		 ex.: featureSet = '2006Yu', '2005Song' ou '2005Guler'
+		      classify_xxx('2006Yu', [], 'PNN');
+
+		- featSel: vetor para seleção de características. Deve-se passar um vetor com zeros e uns onde o zero na posição
+		 do atributo (ou característica) remove o atributo da construção do modelo e do teste. Deve-se saber exatamento a 
+		 dimensionalidade do modelo, ou seja, o tamanho do vetor de atributos.
+		 ex.: para um modelo de 5 dimensões ou 5 atributos, a segunte explessão exclui o segundo e quarto atributo: featSel = [1 0 1 0 1];
+		      classify_xxx('2006Yu', [1 0 1 0 1], 'PNN');
+		      obs.: Para utilziar todas os atributos, deve-se passar um vetor VAZIO: featSel = [];
+		
+		- classifier: string com o nome do classificador a ser utilizado. 
+		  Atualmente os valores podem ser: 'SVM', 'LD', 'PNN' ou 'MLP'. 
+		  *** Atenção: para utilizar o classificador OPF, Leia a seção 4 *** 
+
+		- parâmetros param1, param2, param3: específicos para cada classificador
+			* 'SVM': 
+				- param1 = parâmetro C do SVM, onde se passado o valor 0 o valor default (0.05) é escolhido
+				 e se passado o valor -1 a funça o chama o algoritmo de GRID SELECTION para seleção de C e gamma	 
+				- param2: parâmetro gamma do SVM, onde se passado o valor 0, o método escolhe o valor default (1/8*numero de atributos)
+				- param3: pesos (w) para balanceamento de classes. Se este parâmetro não for passado, default é w=1 para todas as classes
+				ex.: classify_xxx('2010Ye', [], 'SVM', 0.5, 0.001, [1 10 5]);	% pesos diferenteas para as 3 classes do problema
+
+			* 'PNN':
+				- param1: valor do spread para o pnn.
+
+			* 'MLP': vetor com o número de neurônios em cada camada escondida. ex.: classify_xxx('2010Ye', [], 'MLP', [10 5]); % duas camadas escondidas 
+								
+
+4) Classificador OPF (biblioteca externa)
+
+Para o classificador OPF, apenas as características são geradas em Matlab. O treinamento e teste estão sendo feitos com a biblioteca compilada em C disponibilizada pelos próprios autores. Favor ver para mais detalhes e para o código fonte: http://www.ic.unicamp.br/~afalcao/LibOPF
+
+Para geração dos arquivos texto com as características em ASCII, deve-se utilizar a funçao 'saveOPFfile(featureSet)' em saveOPFfile.m. 
+Onde featureSet deve ser a string com o nome do diretório contendo as características extraídas para o método. ex.: featureSet = '2006Yu', '2005Song' ou '2005Guler'
+Este método vai gerar os arquivos no formato OPF em modo texto (ASCII) no diretório 'OPF/nomedometodo'. Por exemplo: saveOPFfile('2007Yu') vai gerar os arquivos
+DS1.txt e DS2.txt no diretório 'OPF/2007Yu'. Os arquivos .txt já estão preparados para o aplicativo 'txt2opf' disponível na biblioteca da LibOPF, que 
+gera os arquivos binários necessários pelos aplicativos principais da biblioteca: opf_train, opf_learn, opf_classify, opf_accuracy.
+
+Um exemplo de script gerado para automatização do processo pode ser:
+
+#!/bin/sh
+
+# Certifique-se que sua LibOPF esteja no PATH
+
+# Necessario converter os arquivos em formato ASCII em formato DAT 
+txt2opf DS1.txt trainingOPF.dat
+txt2opf DS2.txt testingOPF.dat
+
+# training OPF classifier
+opf_train trainingOPF.dat
+
+# classifying the test set
+opf_classify testingOPF.dat
+
+# computing the accuracy over the test set
+opf_accuracy testingOPF.dat
+
+
+5) Framework WEKA (ARFF)
+
+Existem funções no projeto para criação das matrizes de treino e teste em formato ARFF, para uso no framework Weka.
+Favor ver para mais detalhes e para o código fonte: http://www.cs.waikato.ac.nz/ml/weka/
+
+Para geração dos arquivos texto com as características em ARFF, deve-se utilizar a funçao 'saveARFFfile(featureSet)' em saveARFFfile.m. 
+Onde featureSet deve ser a string com o nome do diretório contendo as características extraídas para o método. ex.: featureSet = '2006Yu', '2005Song' ou '2005Guler'
+Este método vai gerar os arquivos no formato ARFF em modo texto no diretório 'WEKA/nomedometodo'. Por exemplo: saveARFFfile('2007Yu') vai gerar os arquivos
+DS1.arff e DS2.arff no diretório 'WEKA/2007Yu'.
+		
+Um exemplo de script gerado para automatização do processo pode ser:				 		
+
+#!/bin/sh
+# teste.sh
+
+train="2007Yu_FS9__DS1_SMOTE.arff"
+teste="2007Yu_FS9__DS2.arff"
+srcwekaSVM="$WEKAPATH/weka.jar:libsvm.jar" #caminho do jar do weka
+
+#echo "*************************"TESTE com Bagging e Random Forest"************************"
+#java -Xmx1024m -classpath $srcweka weka.classifiers.meta.Bagging -t $train -T $teste -v -o -i -P 100 -S 1 -I 10 -W weka.classifiers.trees.RandomForest -- -I 5 -K 0 -S 1
+
+echo "*************************"TESTE com ADAboost e SVM"************************"
+java -Xmx1024m -classpath $srcwekaSVM weka.classifiers.meta.AdaBoostM1 -t $train -T $teste -v -o -i -P 100 -S 1 -I 5 -W weka.classifiers.functions.LibSVM -- -S 0 -K 2 -D 3 -G 0.0 -R 0.0 -N 0.5 -M 40.0 -C 1.0 -E 0.0010 -P 0.1 -W "1.0 1.0 1.0 1.0 1.0"
+
+
+-----
+
+** Atenção: 
+
+	- Deve-se apontar o caminho do weka.jar em saveARFFfile(..)
+	- O método saveARFFfile(..) coloca todos os atributos como numéricos, inclusive o atributo classe. Deve-se preprocessar os arquivos ARFF
+para que o atributo classe, ou o último atributo, seja nominal. Também é necessário especificar todos os valores que o atributo classe pode assumir. 
+Segue abaixo exemplo de um cabeçalho de um arquivo ARFF pronto para utilização, com 10 atributos, incluindo o atributo classe, sendo que o atributo 
+classe pode assumir os valores 1, 2 e 3:
+
+@relation ecgTrain-weka.filters.unsupervised.attribute.NumericToNominal-Rlast
+
+@attribute attrib1 numeric
+@attribute attrib2 numeric
+@attribute attrib3 numeric
+@attribute attrib4 numeric
+@attribute attrib5 numeric
+@attribute attrib6 numeric
+@attribute attrib7 numeric
+@attribute attrib8 numeric
+@attribute attrib9 numeric
+@attribute attrib10 {1,2,3}
+
+
+
+
+
+
+
+
+
+
+
+
